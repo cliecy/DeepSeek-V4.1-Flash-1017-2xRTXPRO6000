@@ -16,12 +16,15 @@ Full numbers: [results/](results/README.md).
 
 ## Quickstart: ready-to-run on Hugging Face
 
-The finished pack and a prebuilt runtime (rootfs with everything compiled) are on Hugging Face as
-**[cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000](https://huggingface.co/cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000)**:
+The finished pack and a prebuilt runtime overlay are on Hugging Face as
+**[cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000](https://huggingface.co/cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000)**.
+The overlay (~50 MB) holds only the files this setup adds to the official vLLM image: the patched vLLM files,
+vllm-exl3, ExLlamaV3 and the compiled kernels. `run.sh` pulls the image itself by digest, so no NVIDIA libraries are
+redistributed.
 
 ```bash
 hf download cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000 --local-dir dsv41-1017
-bash dsv41-1017/run.sh        # checks the host, unpacks the runtime once, serves http://127.0.0.1:8000/v1
+bash dsv41-1017/run.sh        # checks the host, sets up the runtime once (~4 min on NVMe), serves http://127.0.0.1:8000/v1
 ```
 
 This repository is for rebuilding all of that from the upstream sources, and for the benchmarks.
