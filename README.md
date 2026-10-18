@@ -1,3 +1,5 @@
+English | [简体中文](README.zh-CN.md)
+
 # DeepSeek-V4.1-Flash-1017 on 2× RTX PRO 6000 (1M context, ~90–110 tok/s, no Docker, no root)
 
 Scripts and measurements for serving **[DeepSeek-V4.1-Flash-1017](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017)**
@@ -7,12 +9,13 @@ needs no Docker and no root.
 | | |
 |---|---|
 | Single-stream decode | **89–112 tok/s** from 2K to 890K-token prompts (DSpark speculative decoding) |
-| Aggregate decode | 122–141 tok/s with 2 streams, 132–162 tok/s with 4 |
+| Aggregate decode | 117–141 tok/s with 2 streams, 132–162 tok/s with 4 |
 | Prefill | ~5,000 tok/s; an 890K-token prompt takes ~3 min |
 | Long context | needle found 15/15 from 24K to 1.0M tokens |
 | Quality, thinking off | GSM8K 99%, MATH-500 88% (96% thinking on), HumanEval 98%, MMLU-Pro 75%, C-Eval 93%, tool calls 10/10 |
 
-Full numbers: [results/](results/README.md).
+Full numbers: [results/README.md](results/README.md). How requests, GPU memory and host RAM fit together:
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Quickstart: ready-to-run on Hugging Face
 
@@ -60,8 +63,8 @@ Our additions:
 ## Requirements
 
 - 2× sm_120 GPUs with 96 GB each, NVIDIA driver with CUDA 13 support (tested: 595.91.07 / CUDA 13.2).
-- **Host RAM:** ~245 GiB total. Serving pins ~103 GiB (int4 Engram + cold experts) and needs ~190 GiB in total. The
-  Engram conversion peaks at ~121 GiB RSS.
+- **Host RAM:** ~245 GiB total. Serving pins 103 GiB of int4 Engram tables plus the cold experts (~60 GB, estimate),
+  and needs ~190 GiB in total. The Engram conversion peaks at ~121 GiB RSS.
 - **Disk:** ~540 GB on one filesystem for the models (~335 GB after deleting the FP8 Engram shards), plus ~30 GB for the
   rootfs and build tree. NVMe makes cold starts much faster (see Known issues).
 - Linux with unprivileged user namespaces available to `bwrap` (bubblewrap ≥ 0.8). Also `curl`, `git`, `python3`, and
@@ -152,6 +155,19 @@ Optional:
 - `scripts/share-acl.sh` lets a second local account (e.g. a service user) run the server from this tree read-only.
 - `scripts/monitor.sh` logs RAM and VRAM during a launch.
 
+## Architecture
+
+![Serving architecture: client, vLLM scheduler, two GPUs with tensor parallelism, host RAM, disk](docs/architecture.en.svg)
+
+- vLLM runs up to 8 requests at once (`--max-num-seqs 8`); more wait in its queue. All running requests share one fp8
+  KV pool of ~1.07M tokens, so a single 1M-token request fills it.
+- Each GPU (TP2) holds half of every layer: 70% of the routed experts (~71 GB, estimate), the FP8 non-routed layers,
+  the drafter and CUDA graphs. The other 30% of the experts and the int4 Engram tables live in pinned host RAM and are
+  read over PCIe. The all-reduce between the two GPUs goes through host shared memory.
+- One stream decodes at 89–112 tok/s, two at 59–70 tok/s each; total throughput stops growing after about 4 streams.
+
+Details, memory tables and tuning knobs: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Benchmarks
 
 `results/eval/run_all.sh` runs the speed, needle and quality suites against a running server (see
@@ -192,7 +208,8 @@ datasets; the datasets are not redistributed here.
 |---|---|
 | `scripts/` | `env.sh` (settings), `fetch.sh`, `build-bwrap.sh`, `download.sh`, `prepare_pack.sh` + `assemble_pack_1017.py`, `serve-bwrap.sh`, `ctr.sh` (bubblewrap runner), `share-acl.sh`, `nccl_test.py`, `monitor.sh` |
 | `patches/` | How our derived scripts differ from the diffbot recipe files they started from (`serve.sh`, `docker/build.sh`, `quantize/assemble_pack.py`). For reference only; the scripts in `scripts/` are complete. |
-| `results/` | Benchmark report (English + Chinese), `summary.json`, per-run and per-item data, eval harness |
+| `results/` | Benchmark report ([English](results/README.md), [Chinese](results/REPORT.zh.md)), `summary.json`, per-run and per-item data, eval harness |
+| `docs/` | Architecture notes and diagram ([English](docs/ARCHITECTURE.md), [Chinese](docs/ARCHITECTURE.zh-CN.md)) |
 
 ## Credits
 
@@ -207,28 +224,3 @@ datasets; the datasets are not redistributed here.
 - **The vLLM and FlashInfer teams.**
 
 See [NOTICE.md](NOTICE.md) for licenses.
-
-## 中文说明
-
-本仓库介绍如何在 **2× RTX PRO 6000 Max-Q**（PCIe，无 NVLink）上运行 **DeepSeek-V4.1-Flash-1017**：
-- **完整 1M 上下文**；
-- 单路 decode 89–112 tok/s，prefill 约 5K tok/s；
-- 大海捞针从 24K 到 1.0M 全部找到；
-- **不需要 Docker，也不需要 root**。
-
-做法：
-- 沿用 diffbot 为 legacy V4.1 写的 vLLM + EXL3 方案，换上 PixelML 的 1017 EXL3 3bpw 权重；
-- Engram 表取 1017 官方 shard 47/48，转成 int4；
-- 官方 vLLM 镜像用 crane 导出 rootfs，用 bwrap 运行。
-
-两个关键设置：
-- `NCCL_P2P_DISABLE=1`：本机开启 P2P 时第一次 all-reduce 会挂死，可能与 IOMMU 有关；
-- `pinned_max_round_threshold_mb:1024`：主机内存从约 230 GiB 降到约 190 GiB。
-
-已知问题：
-- prefill 只有 diffbot 卡上数字的一半；
-- 从 HDD 冷启动约 85 分钟；
-- 思考模式偶尔推理过长被截断。
-
-直接可用的权重和预编译运行环境在 Hugging Face：[cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000](https://huggingface.co/cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000)，下载后执行 `bash run.sh` 即可。
-从源码重建的步骤见上文 “Step by step”，评测结果见 [results/REPORT.zh.md](results/REPORT.zh.md)。

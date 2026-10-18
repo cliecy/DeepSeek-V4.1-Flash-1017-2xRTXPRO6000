@@ -10,7 +10,7 @@ Measured on 2026-10-18 with the default configuration in `scripts/serve-bwrap.sh
 | Host | 32 cores, 245 GiB RAM. The pack was read from an HDD at ~155 MB/s |
 | Weights | PixelML/DeepSeek-V4.1-Flash-1017-EXL3-3bpw: routed experts EXL3 3 bpw, MUL1 codebook, **uncalibrated**; the rest FP8 as DeepSeek ships it. Engram tables from the official 1017 shards 47-48 converted to int4 (111 GB, pinned host RAM). DSpark drafter MXFP4 as stored |
 | Server | vLLM nightly-5555a2d8 + diffbot's patches, TP2, `max_model_len` 1,048,576, fp8 KV cache 4.25 GiB (1.07M tokens), DSpark k=5, CUDA graphs, host-expert plan `plan-blend30-dh.json`, `NCCL_P2P_DISABLE=1`, vision encoder loaded |
-| Memory | VRAM 89.9 GB/GPU idle, 95.4 GB/GPU peak at ~1M context. Host: Shmem 103 GiB (pinned Engram + cold experts), MemAvailable 59-65 GiB while serving |
+| Memory | VRAM 89.9 GB/GPU idle, 95.4 GB/GPU peak at ~1M context. Host: Shmem 103 GiB (the pinned int4 Engram tables; the pinned cold experts come on top), MemAvailable 59-65 GiB while serving |
 | Cold start | ~85 min from HDD (see the README's known issues) |
 
 ## Speed

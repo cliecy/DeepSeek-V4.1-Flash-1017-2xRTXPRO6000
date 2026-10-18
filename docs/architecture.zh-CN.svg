@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="808" viewBox="0 0 960 808" font-family="&apos;Noto Sans CJK SC&apos;, &apos;PingFang SC&apos;, &apos;Microsoft YaHei&apos;, &apos;Source Han Sans SC&apos;, sans-serif">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555555"/></marker></defs>
+<rect x="0" y="0" width="960" height="808" fill="#ffffff"/>
+<text x="480.0" y="34" font-size="19" font-weight="bold" text-anchor="middle" fill="#222222">DeepSeek-V4.1-Flash-1017 在 2× RTX PRO 6000 上的部署结构</text>
+<rect x="30" y="60" width="190" height="110" rx="8" fill="#f5f5f5" stroke="#888888" stroke-width="1.5"/>
+<text x="125" y="98" font-size="15" font-weight="bold" text-anchor="middle" fill="#222222">客户端</text>
+<text x="125" y="122" font-size="12" font-weight="normal" text-anchor="middle" fill="#555555">OpenAI 兼容 API</text>
+<text x="125" y="142" font-size="12" font-weight="normal" text-anchor="middle" fill="#555555">/v1/chat/completions</text>
+<line x1="222" y1="115" x2="268" y2="115" stroke="#555555" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah)"/>
+<rect x="270" y="60" width="660" height="110" rx="8" fill="#fff8e8" stroke="#c9a227" stroke-width="1.5"/>
+<text x="290" y="86" font-size="15" font-weight="bold" text-anchor="start" fill="#222222">vLLM OpenAI 服务 + 调度器</text>
+<text x="290" y="112" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">• 最多同时运行 8 条序列（--max-num-seqs 8），更多请求在队列里等待</text>
+<text x="290" y="134" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">• prefill 按 16K token 分块 · DSpark 投机解码 k=5（每步约 4 个 token）</text>
+<text x="290" y="156" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">• KV cache 池：fp8，共约 107 万 token，所有运行中的请求共用</text>
+<line x1="380" y1="172" x2="240" y2="218" stroke="#555555" stroke-width="2" marker-end="url(#ah)"/>
+<line x1="820" y1="172" x2="720" y2="218" stroke="#555555" stroke-width="2" marker-end="url(#ah)"/>
+<text x="480.0" y="200" font-size="12.5" font-weight="normal" text-anchor="middle" fill="#555555">张量并行 TP2：每张卡存每一层的一半</text>
+<rect x="30" y="222" width="420" height="248" rx="8" fill="#f3f7fb" stroke="#4c78a8" stroke-width="1.5"/>
+<text x="50" y="250" font-size="14.5" font-weight="bold" text-anchor="start" fill="#222222">GPU 0 · RTX PRO 6000 Max-Q · 97.9 GB</text>
+<rect x="50.0" y="266" width="262.8" height="26" fill="#4c78a8"/>
+<rect x="312.8" y="266" width="77.6" height="26" fill="#f58518"/>
+<rect x="390.4" y="266" width="8.5" height="26" fill="#54a24b"/>
+<rect x="398.9" y="266" width="31.1" height="26" fill="#e6e6e6"/>
+<rect x="50" y="266" width="380" height="26" fill="none" stroke="#666666"/>
+<text x="58" y="284" font-size="12" font-weight="bold" text-anchor="start" fill="#ffffff">~71 GB*</text>
+<text x="318.77834525025537" y="284" font-size="12" font-weight="bold" text-anchor="start" fill="#ffffff">~20 GB*</text>
+<text x="50" y="310" font-size="11.5" font-weight="normal" text-anchor="start" fill="#555555">显存（nvidia-smi）：空闲 89.9 GB，约 1M 上下文时峰值 95.4 GB</text>
+<rect x="50" y="325" width="13" height="13" fill="#4c78a8" stroke="#666666" stroke-width="0.5"/>
+<text x="72" y="336" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">热路由专家（70%），EXL3 3 bpw ≈ 71 GB*</text>
+<rect x="50" y="351" width="13" height="13" fill="#f58518" stroke="#666666" stroke-width="0.5"/>
+<text x="72" y="362" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">非路由 FP8 层、DSpark drafter（MXFP4）、</text>
+<text x="72" y="379" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">CUDA graph、16K 分块的激活 ≈ 20 GB*</text>
+<rect x="50" y="394" width="13" height="13" fill="#54a24b" stroke="#666666" stroke-width="0.5"/>
+<text x="72" y="405" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">KV cache，fp8 ≈ 2.1 GiB（共享池的一半）</text>
+<rect x="50" y="420" width="13" height="13" fill="#e6e6e6" stroke="#666666" stroke-width="0.5"/>
+<text x="72" y="431" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">空闲时未分配，峰值时会用到</text>
+<rect x="510" y="222" width="420" height="248" rx="8" fill="#f3f7fb" stroke="#4c78a8" stroke-width="1.5"/>
+<text x="530" y="250" font-size="14.5" font-weight="bold" text-anchor="start" fill="#222222">GPU 1 · RTX PRO 6000 Max-Q · 97.9 GB</text>
+<rect x="530.0" y="266" width="262.8" height="26" fill="#4c78a8"/>
+<rect x="792.8" y="266" width="77.6" height="26" fill="#f58518"/>
+<rect x="870.4" y="266" width="8.5" height="26" fill="#54a24b"/>
+<rect x="878.9" y="266" width="31.1" height="26" fill="#e6e6e6"/>
+<rect x="530" y="266" width="380" height="26" fill="none" stroke="#666666"/>
+<text x="538" y="284" font-size="12" font-weight="bold" text-anchor="start" fill="#ffffff">~71 GB*</text>
+<text x="798.7783452502554" y="284" font-size="12" font-weight="bold" text-anchor="start" fill="#ffffff">~20 GB*</text>
+<text x="530" y="310" font-size="11.5" font-weight="normal" text-anchor="start" fill="#555555">显存（nvidia-smi）：空闲 89.9 GB，约 1M 上下文时峰值 95.4 GB</text>
+<rect x="530" y="325" width="13" height="13" fill="#4c78a8" stroke="#666666" stroke-width="0.5"/>
+<text x="552" y="336" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">热路由专家（70%），EXL3 3 bpw ≈ 71 GB*</text>
+<rect x="530" y="351" width="13" height="13" fill="#f58518" stroke="#666666" stroke-width="0.5"/>
+<text x="552" y="362" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">非路由 FP8 层、DSpark drafter（MXFP4）、</text>
+<text x="552" y="379" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">CUDA graph、16K 分块的激活 ≈ 20 GB*</text>
+<rect x="530" y="394" width="13" height="13" fill="#54a24b" stroke="#666666" stroke-width="0.5"/>
+<text x="552" y="405" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">KV cache，fp8 ≈ 2.1 GiB（共享池的一半）</text>
+<rect x="530" y="420" width="13" height="13" fill="#e6e6e6" stroke="#666666" stroke-width="0.5"/>
+<text x="552" y="431" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">空闲时未分配，峰值时会用到</text>
+<line x1="150" y1="472" x2="150" y2="560" stroke="#555555" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah)"/>
+<line x1="810" y1="472" x2="810" y2="560" stroke="#555555" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah)"/>
+<text x="162" y="500" font-size="12" font-weight="normal" text-anchor="start" fill="#222222">PCIe：冷专家（在单独的 CUDA</text>
+<text x="162" y="516" font-size="12" font-weight="normal" text-anchor="start" fill="#222222">stream 上读取）、Engram 行</text>
+<text x="798" y="500" font-size="12" font-weight="normal" text-anchor="end" fill="#222222">PCIe：冷专家（在单独的 CUDA</text>
+<text x="798" y="516" font-size="12" font-weight="normal" text-anchor="end" fill="#222222">stream 上读取）、Engram 行</text>
+<line x1="400" y1="472" x2="400" y2="560" stroke="#555555" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah)"/>
+<line x1="560" y1="472" x2="560" y2="560" stroke="#555555" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah)"/>
+<text x="480.0" y="496" font-size="11.5" font-weight="normal" text-anchor="middle" fill="#555555">TP all-reduce</text>
+<text x="480.0" y="512" font-size="11.5" font-weight="normal" text-anchor="middle" fill="#555555">经主机共享内存</text>
+<text x="480.0" y="528" font-size="11.5" font-weight="normal" text-anchor="middle" fill="#555555">(NCCL_P2P_DISABLE=1)</text>
+<rect x="30" y="562" width="900" height="132" rx="8" fill="#f8f3f7" stroke="#b279a2" stroke-width="1.5"/>
+<text x="50" y="590" font-size="14.5" font-weight="bold" text-anchor="start" fill="#222222">主机内存 · 245 GiB · serving 时约用 180–186 GiB</text>
+<rect x="50.0" y="604" width="361.6" height="28" fill="#b279a2"/>
+<text x="58" y="623" font-size="12" font-weight="bold" text-anchor="start" fill="#ffffff">Engram int4 · 103 GiB</text>
+<rect x="411.6" y="604" width="196.6" height="28" fill="#9ecae9"/>
+<text x="419.55102040816325" y="623" font-size="12" font-weight="bold" text-anchor="start" fill="#222222">冷专家 ≈ 56 GiB*</text>
+<rect x="608.1" y="604" width="77.2" height="28" fill="#bab0ac"/>
+<rect x="685.3" y="604" width="224.7" height="28" fill="#eeeeee"/>
+<text x="693.3469387755101" y="623" font-size="12" font-weight="bold" text-anchor="start" fill="#222222">空闲 ≈ 64 GiB</text>
+<rect x="50" y="604" width="860" height="28" fill="none" stroke="#666666"/>
+<rect x="50" y="647" width="13" height="13" fill="#b279a2" stroke="#666666" stroke-width="0.5"/>
+<text x="72" y="658" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">Engram 表，int4，锁页：103 GiB（Shmem）</text>
+<rect x="490" y="647" width="13" height="13" fill="#9ecae9" stroke="#666666" stroke-width="0.5"/>
+<text x="512" y="658" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">冷路由专家（30%，方案 blend30），锁页：≈ 60 GB*</text>
+<rect x="50" y="671" width="13" height="13" fill="#bab0ac" stroke="#666666" stroke-width="0.5"/>
+<text x="72" y="682" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">embedding 表、vLLM 进程、缓冲区等 ≈ 22 GiB*</text>
+<rect x="490" y="671" width="13" height="13" fill="#eeeeee" stroke="#666666" stroke-width="0.5"/>
+<text x="512" y="682" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">MemAvailable 59–65 GiB</text>
+<line x1="480" y1="726" x2="480" y2="696" stroke="#555555" stroke-width="2" marker-end="url(#ah)"/>
+<text x="492" y="716" font-size="11.5" font-weight="normal" text-anchor="start" fill="#555555">启动时加载</text>
+<rect x="30" y="728" width="900" height="52" rx="8" fill="#f0f0f0" stroke="#888888" stroke-width="1.5"/>
+<text x="50" y="750" font-size="13" font-weight="bold" text-anchor="start" fill="#222222">磁盘：334 GB 模型包（EXL3 专家、FP8 层、int4 Engram、drafter）</text>
+<text x="50" y="770" font-size="12" font-weight="normal" text-anchor="start" fill="#555555">启动时读一次：专家和各层进显存，Engram 和冷专家进主机内存</text>
+<text x="30" y="798" font-size="11.5" font-weight="normal" text-anchor="start" fill="#555555">* 估算值（按模型大小推算，或用实测总量相减）。其余数字均为实测。</text>
+</svg>

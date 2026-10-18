@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="808" viewBox="0 0 960 808" font-family="Helvetica, Arial, &apos;DejaVu Sans&apos;, &apos;Liberation Sans&apos;, sans-serif">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555555"/></marker></defs>
+<rect x="0" y="0" width="960" height="808" fill="#ffffff"/>
+<text x="480.0" y="34" font-size="19" font-weight="bold" text-anchor="middle" fill="#222222">DeepSeek-V4.1-Flash-1017 on 2× RTX PRO 6000: serving architecture</text>
+<rect x="30" y="60" width="190" height="110" rx="8" fill="#f5f5f5" stroke="#888888" stroke-width="1.5"/>
+<text x="125" y="98" font-size="15" font-weight="bold" text-anchor="middle" fill="#222222">Clients</text>
+<text x="125" y="122" font-size="12" font-weight="normal" text-anchor="middle" fill="#555555">OpenAI-compatible API</text>
+<text x="125" y="142" font-size="12" font-weight="normal" text-anchor="middle" fill="#555555">/v1/chat/completions</text>
+<line x1="222" y1="115" x2="268" y2="115" stroke="#555555" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah)"/>
+<rect x="270" y="60" width="660" height="110" rx="8" fill="#fff8e8" stroke="#c9a227" stroke-width="1.5"/>
+<text x="290" y="86" font-size="15" font-weight="bold" text-anchor="start" fill="#222222">vLLM OpenAI server + scheduler</text>
+<text x="290" y="112" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">• Runs up to 8 sequences at once (--max-num-seqs 8); further requests wait in the queue</text>
+<text x="290" y="134" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">• Prefill in chunks of 16K tokens · DSpark speculative decoding, k=5 (~4 tokens per step)</text>
+<text x="290" y="156" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">• KV cache pool: fp8, ~1.07M tokens in total, shared by all running requests</text>
+<line x1="380" y1="172" x2="240" y2="218" stroke="#555555" stroke-width="2" marker-end="url(#ah)"/>
+<line x1="820" y1="172" x2="720" y2="218" stroke="#555555" stroke-width="2" marker-end="url(#ah)"/>
+<text x="480.0" y="200" font-size="12.5" font-weight="normal" text-anchor="middle" fill="#555555">tensor parallel 2: each GPU holds half of every layer</text>
+<rect x="30" y="222" width="420" height="248" rx="8" fill="#f3f7fb" stroke="#4c78a8" stroke-width="1.5"/>
+<text x="50" y="250" font-size="14.5" font-weight="bold" text-anchor="start" fill="#222222">GPU 0 · RTX PRO 6000 Max-Q · 97.9 GB</text>
+<rect x="50.0" y="266" width="262.8" height="26" fill="#4c78a8"/>
+<rect x="312.8" y="266" width="77.6" height="26" fill="#f58518"/>
+<rect x="390.4" y="266" width="8.5" height="26" fill="#54a24b"/>
+<rect x="398.9" y="266" width="31.1" height="26" fill="#e6e6e6"/>
+<rect x="50" y="266" width="380" height="26" fill="none" stroke="#666666"/>
+<text x="58" y="284" font-size="12" font-weight="bold" text-anchor="start" fill="#ffffff">~71 GB*</text>
+<text x="318.77834525025537" y="284" font-size="12" font-weight="bold" text-anchor="start" fill="#ffffff">~20 GB*</text>
+<text x="50" y="310" font-size="11.5" font-weight="normal" text-anchor="start" fill="#555555">VRAM (nvidia-smi): 89.9 GB used idle, 95.4 GB peak at ~1M context</text>
+<rect x="50" y="325" width="13" height="13" fill="#4c78a8" stroke="#666666" stroke-width="0.5"/>
+<text x="72" y="336" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">Hot routed experts (70%), EXL3 3 bpw ≈ 71 GB*</text>
+<rect x="50" y="351" width="13" height="13" fill="#f58518" stroke="#666666" stroke-width="0.5"/>
+<text x="72" y="362" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">Non-routed FP8 layers, DSpark drafter (MXFP4),</text>
+<text x="72" y="379" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">CUDA graphs, activations for 16K chunks ≈ 20 GB*</text>
+<rect x="50" y="394" width="13" height="13" fill="#54a24b" stroke="#666666" stroke-width="0.5"/>
+<text x="72" y="405" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">KV cache, fp8 ≈ 2.1 GiB (half of the shared pool)</text>
+<rect x="50" y="420" width="13" height="13" fill="#e6e6e6" stroke="#666666" stroke-width="0.5"/>
+<text x="72" y="431" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">Not allocated at idle; peak use grows into it</text>
+<rect x="510" y="222" width="420" height="248" rx="8" fill="#f3f7fb" stroke="#4c78a8" stroke-width="1.5"/>
+<text x="530" y="250" font-size="14.5" font-weight="bold" text-anchor="start" fill="#222222">GPU 1 · RTX PRO 6000 Max-Q · 97.9 GB</text>
+<rect x="530.0" y="266" width="262.8" height="26" fill="#4c78a8"/>
+<rect x="792.8" y="266" width="77.6" height="26" fill="#f58518"/>
+<rect x="870.4" y="266" width="8.5" height="26" fill="#54a24b"/>
+<rect x="878.9" y="266" width="31.1" height="26" fill="#e6e6e6"/>
+<rect x="530" y="266" width="380" height="26" fill="none" stroke="#666666"/>
+<text x="538" y="284" font-size="12" font-weight="bold" text-anchor="start" fill="#ffffff">~71 GB*</text>
+<text x="798.7783452502554" y="284" font-size="12" font-weight="bold" text-anchor="start" fill="#ffffff">~20 GB*</text>
+<text x="530" y="310" font-size="11.5" font-weight="normal" text-anchor="start" fill="#555555">VRAM (nvidia-smi): 89.9 GB used idle, 95.4 GB peak at ~1M context</text>
+<rect x="530" y="325" width="13" height="13" fill="#4c78a8" stroke="#666666" stroke-width="0.5"/>
+<text x="552" y="336" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">Hot routed experts (70%), EXL3 3 bpw ≈ 71 GB*</text>
+<rect x="530" y="351" width="13" height="13" fill="#f58518" stroke="#666666" stroke-width="0.5"/>
+<text x="552" y="362" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">Non-routed FP8 layers, DSpark drafter (MXFP4),</text>
+<text x="552" y="379" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">CUDA graphs, activations for 16K chunks ≈ 20 GB*</text>
+<rect x="530" y="394" width="13" height="13" fill="#54a24b" stroke="#666666" stroke-width="0.5"/>
+<text x="552" y="405" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">KV cache, fp8 ≈ 2.1 GiB (half of the shared pool)</text>
+<rect x="530" y="420" width="13" height="13" fill="#e6e6e6" stroke="#666666" stroke-width="0.5"/>
+<text x="552" y="431" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">Not allocated at idle; peak use grows into it</text>
+<line x1="150" y1="472" x2="150" y2="560" stroke="#555555" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah)"/>
+<line x1="810" y1="472" x2="810" y2="560" stroke="#555555" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah)"/>
+<text x="162" y="500" font-size="12" font-weight="normal" text-anchor="start" fill="#222222">PCIe: cold experts (read on their</text>
+<text x="162" y="516" font-size="12" font-weight="normal" text-anchor="start" fill="#222222">own CUDA stream), Engram rows</text>
+<text x="798" y="500" font-size="12" font-weight="normal" text-anchor="end" fill="#222222">PCIe: cold experts (read on their</text>
+<text x="798" y="516" font-size="12" font-weight="normal" text-anchor="end" fill="#222222">own CUDA stream), Engram rows</text>
+<line x1="400" y1="472" x2="400" y2="560" stroke="#555555" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah)"/>
+<line x1="560" y1="472" x2="560" y2="560" stroke="#555555" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah)"/>
+<text x="480.0" y="496" font-size="11.5" font-weight="normal" text-anchor="middle" fill="#555555">TP all-reduce via</text>
+<text x="480.0" y="512" font-size="11.5" font-weight="normal" text-anchor="middle" fill="#555555">host shared memory</text>
+<text x="480.0" y="528" font-size="11.5" font-weight="normal" text-anchor="middle" fill="#555555">(NCCL_P2P_DISABLE=1)</text>
+<rect x="30" y="562" width="900" height="132" rx="8" fill="#f8f3f7" stroke="#b279a2" stroke-width="1.5"/>
+<text x="50" y="590" font-size="14.5" font-weight="bold" text-anchor="start" fill="#222222">Host RAM · 245 GiB · about 180–186 GiB in use while serving</text>
+<rect x="50.0" y="604" width="361.6" height="28" fill="#b279a2"/>
+<text x="58" y="623" font-size="12" font-weight="bold" text-anchor="start" fill="#ffffff">Engram int4 · 103 GiB</text>
+<rect x="411.6" y="604" width="196.6" height="28" fill="#9ecae9"/>
+<text x="419.55102040816325" y="623" font-size="12" font-weight="bold" text-anchor="start" fill="#222222">cold experts ≈ 56 GiB*</text>
+<rect x="608.1" y="604" width="77.2" height="28" fill="#bab0ac"/>
+<rect x="685.3" y="604" width="224.7" height="28" fill="#eeeeee"/>
+<text x="693.3469387755101" y="623" font-size="12" font-weight="bold" text-anchor="start" fill="#222222">free ≈ 64 GiB</text>
+<rect x="50" y="604" width="860" height="28" fill="none" stroke="#666666"/>
+<rect x="50" y="647" width="13" height="13" fill="#b279a2" stroke="#666666" stroke-width="0.5"/>
+<text x="72" y="658" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">Engram tables, int4, pinned: 103 GiB (Shmem)</text>
+<rect x="490" y="647" width="13" height="13" fill="#9ecae9" stroke="#666666" stroke-width="0.5"/>
+<text x="512" y="658" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">Cold routed experts (30%, plan blend30), pinned: ≈ 60 GB*</text>
+<rect x="50" y="671" width="13" height="13" fill="#bab0ac" stroke="#666666" stroke-width="0.5"/>
+<text x="72" y="682" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">Embedding table, vLLM processes, buffers ≈ 22 GiB*</text>
+<rect x="490" y="671" width="13" height="13" fill="#eeeeee" stroke="#666666" stroke-width="0.5"/>
+<text x="512" y="682" font-size="12.5" font-weight="normal" text-anchor="start" fill="#222222">MemAvailable 59–65 GiB</text>
+<line x1="480" y1="726" x2="480" y2="696" stroke="#555555" stroke-width="2" marker-end="url(#ah)"/>
+<text x="492" y="716" font-size="11.5" font-weight="normal" text-anchor="start" fill="#555555">load at start</text>
+<rect x="30" y="728" width="900" height="52" rx="8" fill="#f0f0f0" stroke="#888888" stroke-width="1.5"/>
+<text x="50" y="750" font-size="13" font-weight="bold" text-anchor="start" fill="#222222">Disk: 334 GB pack (EXL3 experts, FP8 layers, int4 Engram, drafter)</text>
+<text x="50" y="770" font-size="12" font-weight="normal" text-anchor="start" fill="#555555">read once at start: experts and layers to the GPUs, Engram and cold experts to host RAM</text>
+<text x="30" y="798" font-size="11.5" font-weight="normal" text-anchor="start" fill="#555555">* estimate (from model size, or by subtraction from measured totals). Everything else is measured.</text>
+</svg>
