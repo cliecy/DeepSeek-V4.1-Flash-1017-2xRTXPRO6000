@@ -1,0 +1,96 @@
+--- a/recipe/docker/build.sh
++++ b/scripts/build-bwrap.sh
+@@ -1,55 +1,41 @@
+ #!/usr/bin/env bash
+-# Build the sm_120 serving image (default tag dsv41-flash-exl3-3bpw-sm120):
+-#   vLLM main nightly-5555a2d8 (2026-10-13; v0.32.0rc0 content, so vLLM #58132 decoder-side SWA bounded replay, #59894 replay
+-#   cut-layer trim, #58560 compressor null-block fix and #59532 replay graphs are upstream now)
+-#   + patches/vllm/sm120-thor-fixes.diff            (sm_120 fixes: FlashInfer 0.7 masked-slot pad, V4.1 indexer page geometry,
+-#                                                    MXFP8 dense scale layout, multi-stream threshold, int4 Engram tables)
+-#   + patches/vllm/v41-engram-post-lifetime.diff     (release the engram layer's post-mapped hc stream before attention + MoE;
+-#                                                    without it a 1M-token prefill peaks ~1.1 GB/GPU higher on this base)
+-#   + patches/vllm/pr59585-dsml-finite-args.diff     (vLLM #59585: DSML tool arguments stay valid JSON when the model writes
+-#                                                    NaN / Infinity / an out-of-range number)
+-#   + patches/vllm/pr61039-length-aware-candidate-blocks.diff (vLLM #61039, merged after this nightly: length-aware candidate
+-#                                                    block selection in the decode indexer)
+-#   + patches/vllm/pr61142-dsml-drifted-openers.diff (vLLM #61142: the V4.1 parser tolerates drifted DSML tool-call openers)
+-#   + patches/vllm/pr60792-v41-image-order.diff      (vLLM #60792: V4.1 image placeholders follow the rendered content order)
+-#   + vllm-exl3 d3cfd394 with patches/vllm-exl3/exl3-thor.patch (AGPL-3.0: host-RAM experts, side-stream overlap, lean routing prep)
+-#   + ExLlamaV3 5be88657 built for sm_120a (its exl3_moe is replaced at runtime by kernels/xmoe, see kernels/build.sh)
+-#   + sfxnz's docker/patch helpers in /opt/dsv41-patch (vllm-exl3 setup fix, sm120 page helper)
+-# patches/vllm/sitecustomize.py is not baked in: serve/serve.sh mounts it, so its THOR_* hooks can be edited without a rebuild.
+-# Uses `docker run` + `docker commit` (BuildKit hung twice on our host). The build container is capped at BUILD_MEM (default
+-# 64g) and BUILD_CPUS so it can run next to a live server. Most of the time goes to the ExLlamaV3 CUDA build.
++# Step 2: rootless equivalent of the diffbot recipe's docker/build.sh + kernels/build.sh (no Docker, no GPU needed).
++# Applies the same pinned stack to the unpacked vllm/vllm-openai:nightly-5555a2d8 rootfs in place:
++#   vLLM patches (recipe/patches/vllm/*.diff), vllm-exl3 d3cfd394 + recipe/patches/vllm-exl3/exl3-thor.patch,
++#   ExLlamaV3 5be88657 for sm_120a, the sfxnz helpers in /opt/dsv41-patch, then the xmoe / xmoe_do kernels into
++#   $RECIPE/kernels/build. Takes ~30 min on 32 cores (mostly the ExLlamaV3 CUDA build).
++# usage: build-bwrap.sh [step...]   steps: apt vllm plugin exllamav3 kernels (default: all, in order)
+ set -euo pipefail
+-REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+-TAG=${TAG:-dsv41-flash-exl3-3bpw-sm120}
+-BASE=${BASE:-vllm/vllm-openai:nightly-5555a2d8f7116b2b4877f66516f4128176cf722a@sha256:8896fd7b29fc4ee7ce839f146cb4757984c476ec79d0234ffa8c995dee6e339a}
+-VLLM_EXL3_REF=d3cfd394920360d69f820d2dc96f8292a9e10283
+-EXLLAMAV3_REF=5be886578ec80324c2c715269387be2058724b6e
+-RECIPE=$REPO/third_party/sfxnz-recipe
+-RECIPE_REF=${RECIPE_REF:-460ac89c7df1eea4db8a731f1feb807f1584f359}
+-[ -d "$RECIPE/.git" ] || git clone https://github.com/sfxnz/DeepSeek-V4.1-Flash-EXL3-vLLM-2x-DGX-Spark "$RECIPE"
+-git -C "$RECIPE" fetch -q origin && git -C "$RECIPE" checkout -q "$RECIPE_REF"
+-C=${BUILD_CONTAINER:-dsv41-img-build}; docker rm -f "$C" >/dev/null 2>&1 || true
+-docker run --name "$C" --memory="${BUILD_MEM:-64g}" --cpus="${BUILD_CPUS:-32}" --entrypoint bash \
+-  -e VLLM_EXL3_REF=$VLLM_EXL3_REF -e EXLLAMAV3_REF=$EXLLAMAV3_REF -e MAX_JOBS="${MAX_JOBS:-16}" \
+-  -v "$RECIPE/docker/patch":/mnt/patch:ro -v "$REPO/patches":/mnt/patches:ro "$BASE" -lc '
+-set -euxo pipefail
++source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
++JOBS=${MAX_JOBS:-8}
+ VP=/usr/local/lib/python3.12/dist-packages
+-cp -r /mnt/patch /opt/dsv41-patch
+-apt-get update && apt-get install -y --no-install-recommends git patch libcusparse-dev-13-0 libcusolver-dev-13-0
+-cd $VP && for p in sm120-thor-fixes v41-engram-post-lifetime pr59585-dsml-finite-args pr61039-length-aware-candidate-blocks \
+-    pr61142-dsml-drifted-openers pr60792-v41-image-order; do patch -p1 --forward --no-backup-if-mismatch < /mnt/patches/vllm/$p.diff; done
+-find $VP/vllm -name __pycache__ -prune -exec rm -rf {} +
+-python3 -c "import vllm.models.deepseek_v41.decoder_replay_layers, vllm.models.deepseek_v41.attention, vllm.models.deepseek_v41.common.engram, vllm.models.deepseek_v41.nvidia.model, vllm.models.deepseek_v41.nvidia.flashinfer_sparse, vllm.parser.deepseek_v4, vllm.parser.deepseek_v41; print(\"vllm patches ok\")"
+-git clone https://github.com/vcruz305/vllm-exl3.git /opt/vllm-exl3 && git -C /opt/vllm-exl3 checkout "$VLLM_EXL3_REF"
+-cd /opt/vllm-exl3 && patch -p1 < /mnt/patches/vllm-exl3/exl3-thor.patch
+-python3 /opt/dsv41-patch/fix_vllm_exl3_setup.py /opt/vllm-exl3/setup.py
+-VLLM_EXL3_NO_CUDA=1 python3 -m pip install --no-build-isolation --no-deps /opt/vllm-exl3
+-python3 -c "import vllm_exl3; print(\"vllm_exl3 ok\")"
+-git clone https://github.com/turboderp-org/exllamav3.git /opt/exllamav3 && git -C /opt/exllamav3 checkout "$EXLLAMAV3_REF"
+-TORCH_CUDA_ARCH_LIST=12.0a python3 -m pip install --no-build-isolation --no-deps /opt/exllamav3
+-python3 -c "import torch, exllamav3, exllamav3_ext; assert hasattr(exllamav3_ext, \"exl3_moe\"); print(\"exllamav3 ok\")"
+-rm -rf /opt/exllamav3 /opt/vllm-exl3 /var/lib/apt/lists/*'
+-docker commit --change 'ENV VLLM_PLUGINS=vllm_exl3' --change 'ENV DSV41_ENGRAM_DISK=0' --change 'ENV DSV41_ENGRAM_INT4=1' \
+-  --change 'ENTRYPOINT ["vllm","serve"]' --change 'CMD []' "$C" "$TAG"
+-docker rm "$C" >/dev/null
+-docker images "$TAG"
++run() { nice -n 19 "$SCRIPTS/ctr.sh" -r "$RECIPE/patches:/mnt/patches" -r "$SRC/sfxnz-recipe/docker/patch:/mnt/patch" \
++  -r "$SRC/vllm-exl3:/mnt/vllm-exl3" -r "$SRC/exllamav3:/mnt/exllamav3" -b "$RECIPE/kernels:/k" \
++  -e MAX_JOBS=$JOBS -e TORCH_CUDA_ARCH_LIST=12.0a -- bash -c "set -euxo pipefail; $1"; }
++step_apt() { run '
++  rm -rf /opt/dsv41-patch && cp -r /mnt/patch /opt/dsv41-patch
++  apt-get -o APT::Sandbox::User=root update
++  apt-get -o APT::Sandbox::User=root install -y --no-install-recommends git patch libcusparse-dev-13-0 libcusolver-dev-13-0'; }
++step_vllm() { run "
++  cd $VP
++  for p in sm120-thor-fixes v41-engram-post-lifetime pr59585-dsml-finite-args pr61039-length-aware-candidate-blocks \
++      pr61142-dsml-drifted-openers pr60792-v41-image-order; do
++    patch -p1 --forward --no-backup-if-mismatch < /mnt/patches/vllm/\$p.diff
++  done
++  find $VP/vllm -name __pycache__ -prune -exec rm -rf {} +
++  python3 -c 'import vllm.models.deepseek_v41.decoder_replay_layers, vllm.models.deepseek_v41.attention, vllm.models.deepseek_v41.common.engram, vllm.models.deepseek_v41.nvidia.model, vllm.models.deepseek_v41.nvidia.flashinfer_sparse, vllm.parser.deepseek_v4, vllm.parser.deepseek_v41; print(\"vllm patches ok\")'"; }
++step_plugin() { run '
++  rm -rf /opt/vllm-exl3 && cp -r /mnt/vllm-exl3 /opt/vllm-exl3 && cd /opt/vllm-exl3
++  patch -p1 < /mnt/patches/vllm-exl3/exl3-thor.patch
++  python3 /opt/dsv41-patch/fix_vllm_exl3_setup.py /opt/vllm-exl3/setup.py
++  VLLM_EXL3_NO_CUDA=1 python3 -m pip install --no-build-isolation --no-deps /opt/vllm-exl3
++  python3 -c "import vllm_exl3; print(\"vllm_exl3 ok\")"
++  rm -rf /opt/vllm-exl3'; }
++step_exllamav3() { run '
++  rm -rf /opt/exllamav3 && cp -r /mnt/exllamav3 /opt/exllamav3
++  python3 -m pip install --no-build-isolation --no-deps /opt/exllamav3
++  python3 -c "import torch, exllamav3, exllamav3_ext; assert hasattr(exllamav3_ext, \"exl3_moe\"); print(\"exllamav3 ok\")"
++  rm -rf /opt/exllamav3'; }
++step_kernels() { run 'cd /k && python3 build_xmoe.py xmoe xmoe && python3 build_xmoe_do.py'; }
++for s in ${@:-apt vllm plugin exllamav3 kernels}; do echo "=== step $s"; "step_$s"; done
++echo "build-bwrap: done ($*)"

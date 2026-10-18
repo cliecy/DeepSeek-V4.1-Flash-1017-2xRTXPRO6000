@@ -1,0 +1,11 @@
+{
+ "task": "gsm8k",
+ "think": true,
+ "n": 100,
+ "correct": 98,
+ "acc": 0.98,
+ "errors": 0,
+ "truncated": 1,
+ "mean_completion_tokens": 502.59,
+ "wall_s": 373
+}

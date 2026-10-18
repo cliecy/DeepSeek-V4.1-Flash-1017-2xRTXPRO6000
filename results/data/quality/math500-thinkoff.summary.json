@@ -1,0 +1,12 @@
+{
+ "task": "math500",
+ "think": false,
+ "n": 50,
+ "correct": 44,
+ "acc": 0.88,
+ "errors": 0,
+ "truncated": 3,
+ "mean_completion_tokens": 651.66,
+ "wall_s": 141,
+ "regraded": true
+}

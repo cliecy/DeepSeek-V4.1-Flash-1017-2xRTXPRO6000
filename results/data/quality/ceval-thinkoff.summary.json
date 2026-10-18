@@ -1,0 +1,11 @@
+{
+ "task": "ceval",
+ "think": false,
+ "n": 100,
+ "correct": 93,
+ "acc": 0.93,
+ "errors": 0,
+ "truncated": 1,
+ "mean_completion_tokens": 122.41,
+ "wall_s": 233
+}

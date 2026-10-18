@@ -1,0 +1,15 @@
+{"ctx": 32000, "depth": 10, "ptok": 24066, "seconds": 5.110124349594116, "found": true, "answer": "CRANE-848261"}
+{"ctx": 32000, "depth": 50, "ptok": 24021, "seconds": 5.118861675262451, "found": true, "answer": "CRANE-815053"}
+{"ctx": 32000, "depth": 90, "ptok": 28531, "seconds": 5.965457916259766, "found": true, "answer": "CRANE-878135"}
+{"ctx": 131072, "depth": 10, "ptok": 104961, "seconds": 19.324641704559326, "found": true, "answer": "CRANE-141888"}
+{"ctx": 131072, "depth": 50, "ptok": 108907, "seconds": 20.204423427581787, "found": true, "answer": "CRANE-840873"}
+{"ctx": 131072, "depth": 90, "ptok": 116290, "seconds": 22.511182069778442, "found": true, "answer": "CRANE-829082"}
+{"ctx": 524288, "depth": 10, "ptok": 463322, "seconds": 90.4123146533966, "found": true, "answer": "CRANE-324349"}
+{"ctx": 524288, "depth": 50, "ptok": 429842, "seconds": 83.52858972549438, "found": true, "answer": "CRANE-513811"}
+{"ctx": 524288, "depth": 90, "ptok": 450136, "seconds": 88.2376401424408, "found": true, "answer": "CRANE-597299"}
+{"ctx": 1040000, "depth": 10, "ptok": 887592, "seconds": 181.94732999801636, "found": true, "answer": "CRANE-441668"}
+{"ctx": 1040000, "depth": 50, "ptok": 885543, "seconds": 181.72596144676208, "found": true, "answer": "CRANE-888106"}
+{"ctx": 1040000, "depth": 90, "ptok": 885681, "seconds": 181.6060492992401, "found": true, "answer": "CRANE-331052"}
+{"ctx": 1160000, "depth": 10, "ptok": 1005910, "seconds": 208.8047776222229, "found": true, "answer": "CRANE-265506"}
+{"ctx": 1160000, "depth": 50, "ptok": 988786, "seconds": 205.05368280410767, "found": true, "answer": "CRANE-716815"}
+{"ctx": 1160000, "depth": 90, "ptok": 987923, "seconds": 204.7749035358429, "found": true, "answer": "CRANE-221295"}

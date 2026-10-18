@@ -1,0 +1,89 @@
+--- a/recipe/quantize/assemble_pack.py
++++ b/scripts/assemble_pack_1017.py
+@@ -1,41 +1,63 @@
+ #!/usr/bin/env python3
+-"""assemble_pack.py --experts <coolbho3k pack> --drafter <quantize_mtp_exl3.py output> --engram <convert_engram_int4.py output>
+---sidecars <official DeepSeek-V4.1-Flash snapshot> --config <this repo's config.json> --out <dir>
++"""assemble_pack_1017.py --experts <PixelML 1017 EXL3 3bpw dir> --engram <convert_engram_int4.py output of the 1017 base>
++--sidecars <1017 base snapshot (tokenizer, encoding/, inference/)> --config <diffbot config.json> --out <dir>
++[--drafter <quantize_mtp_exl3.py output, shards 44-46>]
+ 
+-Builds the published pack layout with hardlinks (all inputs on the out filesystem) or copies (--copy):
+-  model-00001..00051-of-00056  coolbho3k/DeepSeek-V4.1-Flash-EXL3-3bpw shards (EXL3 3.0 bpw MUL1 routed experts, FP8 non-routed)
+-  model-00052..00054-of-00056  the drafter shards (official model-00044..46-of-00048 with routed experts re-encoded as EXL3 3-bit)
+-  model-00055..00056-of-00056  the int4 Engram shards (official model-00047..48-of-00048 re-encoded)
+-The index is rebuilt from the shard headers; a tensor present in several shards is indexed to the first one (coolbho3k's copies of
+-the four small Engram tensors per layer, which are byte-identical to the official ones)."""
++diffbot-layout pack for DeepSeek-V4.1-Flash-1017 (hardlinks, all inputs on the out filesystem):
++  model-00001..00046-of-00048  PixelML shards (EXL3 3.0 bpw MUL1 routed experts, FP8 non-routed, MXFP4 drafter in 44-46)
++                               or, with --drafter, 44-46 from the EXL3 3-bit drafter re-encode
++  model-00047..00048-of-00048  int4 Engram tables (1017 base shards 47-48 re-encoded by convert_engram_int4.py)
++The index is rebuilt from the shard headers (PixelML's index lists .mcg markers that its shards do not contain).
++config.json = the diffbot config (architecture fields are identical for 1017); without --drafter its quantization_config
++switches the drafter to source-format experts (mtp_experts "source", mtp_experts_start_layer 40)."""
+ import argparse, json, os, shutil, struct
+ ap = argparse.ArgumentParser()
+-for a in ("--experts", "--drafter", "--engram", "--sidecars", "--config", "--out"):
++for a in ("--experts", "--engram", "--sidecars", "--config", "--out"):
+     ap.add_argument(a, required=True)
+-ap.add_argument("--copy", action="store_true")
++ap.add_argument("--drafter")
+ args = ap.parse_args()
+-put = shutil.copy2 if args.copy else (lambda s, d: os.link(os.path.realpath(s), d))
++put = lambda s, d: os.link(os.path.realpath(s), d)
+ def header(path):
+     with open(path, "rb") as f:
+-        n = struct.unpack("<Q", f.read(8))[0]; return json.loads(f.read(n))
+-cb = sorted({v for v in json.load(open(f"{args.experts}/model.safetensors.index.json"))["weight_map"].values()})
+-src = [f"{args.experts}/{f}" for f in cb] + [f"{args.drafter}/model-{n:05d}-of-00048.safetensors" for n in (44, 45, 46)] \
+-    + [f"{args.engram}/model-{n:05d}-of-00048.safetensors" for n in (47, 48)]
+-assert len(src) == 56, f"expected 51 + 3 + 2 shards, got {len(src)}"
++        n = struct.unpack("<Q", f.read(8))[0]
++        return json.loads(f.read(n))
++src = []
++for n in range(1, 49):
++    name = f"model-{n:05d}-of-00048.safetensors"
++    if n >= 47:
++        src.append(f"{args.engram}/{name}")
++    elif n >= 44 and args.drafter:
++        src.append(f"{args.drafter}/{name}")
++    else:
++        src.append(f"{args.experts}/{name}")
++missing = [s for s in src if not os.path.exists(s)]
++assert not missing, f"missing shards: {missing}"
+ os.makedirs(args.out, exist_ok=True)
+ wm, total = {}, 0
+-for i, s in enumerate(src, 1):
+-    name = f"model-{i:05d}-of-00056.safetensors"; dst = f"{args.out}/{name}"
++for s in src:
++    dst = f"{args.out}/{os.path.basename(s)}"
+     if not os.path.exists(dst):
+         put(s, dst)
+     for k, v in header(dst).items():
+         if k != "__metadata__" and k not in wm:
+-            wm[k] = name; total += v["data_offsets"][1] - v["data_offsets"][0]
+-json.dump({"metadata": {"total_size": total}, "weight_map": dict(sorted(wm.items()))}, open(f"{args.out}/model.safetensors.index.json", "w"), indent=2)
+-shutil.copy2(args.config, f"{args.out}/config.json")
+-for f in ("tokenizer.json", "tokenizer_config.json", "LICENSE", "DeepSeek_V41_Tech_Report.pdf", "encoding", "inference", "evaluation", "assets"):
++            wm[k] = os.path.basename(s)
++            total += v["data_offsets"][1] - v["data_offsets"][0]
++json.dump({"metadata": {"total_size": total}, "weight_map": dict(sorted(wm.items()))},
++          open(f"{args.out}/model.safetensors.index.json", "w"), indent=2)
++cfg = json.load(open(args.config))
++q = cfg["quantization_config"]
++if args.drafter:
++    q["source"] = "PixelML/DeepSeek-V4.1-Flash-1017-EXL3-3bpw (routed experts + non-routed); Engram int4 from deepseek-ai/DeepSeek-V4.1-Flash-1017@1bae0e10; DSpark drafter routed experts EXL3 3bpw MCG (uncalibrated)"
++else:
++    q["mtp_experts"] = "source"
++    q["mtp_experts_start_layer"] = 40
++    q["layer_bits"] = {k: v for k, v in q["layer_bits"].items() if int(k) < 40}
++    q["source"] = "PixelML/DeepSeek-V4.1-Flash-1017-EXL3-3bpw (routed experts + non-routed, MXFP4 drafter as stored); Engram int4 from deepseek-ai/DeepSeek-V4.1-Flash-1017@1bae0e10"
++json.dump(cfg, open(f"{args.out}/config.json", "w"), indent=2)
++for f in ("tokenizer.json", "tokenizer_config.json", "LICENSE", "encoding", "inference"):
+     s, d = f"{args.sidecars}/{f}", f"{args.out}/{f}"
+     if os.path.exists(s) and not os.path.exists(d):
+         shutil.copytree(s, d, copy_function=put) if os.path.isdir(s) else put(s, d)
++exl3 = sum(k.endswith(".trellis") for k in wm)
+ mtp = sum(k.startswith("mtp.") and k.endswith(".trellis") for k in wm)
+-print(f"{args.out}: 56 shards, {len(wm)} tensors, {total / 1e9:.1f} GB indexed, {mtp} EXL3 drafter expert tensors")
++print(f"{args.out}: {len(src)} shards, {len(wm)} tensors, {total / 1e9:.1f} GB indexed, {exl3} EXL3 tensors ({mtp} drafter)")

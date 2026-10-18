@@ -1,0 +1,15 @@
+start-short-off vllm:spec_decode_num_drafts_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 14.0
+start-short-off vllm:spec_decode_num_draft_tokens_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 70.0
+start-short-off vllm:spec_decode_num_accepted_tokens_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 25.0
+end-short-off vllm:spec_decode_num_drafts_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 1656.0
+end-short-off vllm:spec_decode_num_draft_tokens_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 8280.0
+end-short-off vllm:spec_decode_num_accepted_tokens_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 3788.0
+end-short-on vllm:spec_decode_num_drafts_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 1842.0
+end-short-on vllm:spec_decode_num_draft_tokens_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 9210.0
+end-short-on vllm:spec_decode_num_accepted_tokens_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 4118.0
+end-long vllm:spec_decode_num_drafts_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 1982.0
+end-long vllm:spec_decode_num_draft_tokens_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 9910.0
+end-long vllm:spec_decode_num_accepted_tokens_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 4492.0
+end-needle vllm:spec_decode_num_drafts_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 2006.0
+end-needle vllm:spec_decode_num_draft_tokens_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 10030.0
+end-needle vllm:spec_decode_num_accepted_tokens_total{engine="0",model_name="deepseek/DeepSeek-V4.1-Flash-1017-EXL3"} 4540.0

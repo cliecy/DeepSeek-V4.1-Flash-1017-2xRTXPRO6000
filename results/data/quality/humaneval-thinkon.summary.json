@@ -1,0 +1,11 @@
+{
+ "task": "humaneval",
+ "think": true,
+ "n": 50,
+ "correct": 45,
+ "acc": 0.9,
+ "errors": 0,
+ "truncated": 5,
+ "mean_completion_tokens": 2311.4,
+ "wall_s": 625
+}

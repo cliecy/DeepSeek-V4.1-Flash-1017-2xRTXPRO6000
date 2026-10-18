@@ -1,0 +1,10 @@
+{
+ "task": "mmlupro",
+ "think": true,
+ "n": 64,
+ "correct": 46,
+ "acc": 0.71875,
+ "truncated": 9,
+ "partial": true,
+ "mean_completion_tokens": 3583.21875
+}
