@@ -1,6 +1,6 @@
 --- a/recipe/serve/serve.sh
 +++ b/scripts/serve-bwrap.sh
-@@ -1,26 +1,28 @@
+@@ -1,26 +1,27 @@
  #!/usr/bin/env bash
 -# Serve DeepSeek-V4.1-Flash (EXL3 3.0 bpw routed experts, int4 Engram, EXL3 3-bit DSpark drafter experts) with vLLM TP2 on
 -# 2x RTX PRO 6000 Blackwell (sm_120, 96 GB each). The defaults below are the configuration behind the model card numbers.
@@ -32,9 +32,8 @@
 -[[ $PACK == "$MODELS_DIR"/* ]] || MODELS_DIR=$(dirname "$PACK")   # the pack's parent is mounted at the same path
 -IMAGE=${IMAGE:-dsv41-flash-exl3-3bpw-sm120}
 -NAME=${NAME:-dsv41-flash-exl3}
-+# The assembled pack (prepare_pack.sh); its parent directory is bound read-only at the same path.
-+PACK=$(readlink -f "$PACK")                 # bind the real path if $MODELS_DIR is a symlink
-+MODELS_DIR=$(dirname "$PACK")
++# The assembled pack (prepare_pack.sh, or the Hugging Face repo); bound read-only at the same path.
++PACK=$(readlink -f "$PACK")                 # bind the real path if it is reached through a symlink
 +CTR=${CTR:-$SCRIPTS/ctr.sh}
  PORT=${PORT:-8000}
 -SERVED=${SERVED:-deepseek-v4.1-flash}
@@ -47,7 +46,7 @@
  MAX_MODEL_LEN=${MAX_MODEL_LEN:-1048576}      # 1M tokens (the model's full window); 524288 + KV_MEM=4294967296 = the earlier 512K setup
  MAX_NUM_SEQS=${MAX_NUM_SEQS:-8}
  MAX_BATCHED=${MAX_BATCHED:-16384}           # prefill chunk; 16K beats 8K on fan-out and 4-stream decode
-@@ -37,7 +39,7 @@
+@@ -37,7 +38,7 @@
  FI_ARCH=${FI_ARCH:-12.0f}
  THINKING=${THINKING:-default}               # default = model decides (on, effort 50); off = force thinking off
  VISION=${VISION:-1}                         # 1 = load the vision encoder (0.77 GiB bf16; images via the image_url API); 0 = text only
@@ -56,7 +55,7 @@
  WARMUP=${WARMUP:-1}                         # compile the remaining TileLang/Triton kernels before real traffic
  [[ -f $PACK/config.json ]] || { echo "no config.json in PACK=$PACK"; exit 1; }
  [[ -z ${XMOE_EXT:-} || -d $REPO/kernels/build/$XMOE_EXT ]] || { echo "kernels/build/$XMOE_EXT missing: run kernels/build.sh (or XMOE_EXT= for the stock kernel)"; exit 1; }
-@@ -73,34 +75,45 @@
+@@ -73,39 +74,58 @@
  [[ -n ${NO_CUSTOM_AR:-} ]] && extra+=(--disable-custom-all-reduce)
  [[ -n ${LINEAR_BACKEND:-} ]] && extra+=(--linear-backend "$LINEAR_BACKEND")
  [[ $THINKING == off ]] && extra+=(--default-chat-template-kwargs '{"thinking":false,"reasoning_effort":"low"}')
@@ -68,6 +67,41 @@
  # pass-through into the container: EXL3_*/VLLM_EXL3_*, THOR_*, XMOE_*, NCCL_PROTO/ALGO, DENSE_HYBRID_M
  PASS_ENV=$(env | grep -E "^(VLLM_EXL3_[A-Z0-9_]+|EXL3_[A-Z0-9_]+|THOR_[A-Z0-9_]+|XMOE_[A-Z_]+|NCCL_PROTO|NCCL_ALGO|DENSE_HYBRID_M)=" | sed "s/^/-e /" | tr "\n" " ")
 -cleanup() { [ -n "${WPID:-}" ] && kill $WPID 2>/dev/null; docker rm -f "$NAME" >/dev/null 2>&1; }
++# torch 2.13's pinned host allocator rounds every pin_memory=True allocation up to a power of two by default; the int4
++# Engram tables (~22.9 + 2.9 GiB per layer and rank) would take 32 + 4 GiB each, ~41 GiB of extra pinned RAM over the
++# 4 tables. Allocations above PIN_ROUND_MB are made at their exact size.
++PIN_ROUND_MB=${PIN_ROUND_MB:-1024}
++# NCCL_P2P_DISABLE defaults to 1: on our 2x PCIe host (GPU0-GPU1 PHB, no NVLink, IOMMU on) NCCL's P2P transport hangs in
++# the first all-reduce (nccl_test.py: P2P on never finishes, P2P off completes in ~1 s). Try 0 if nccl_test.py passes.
++LIMIT=(); [[ -n $CONTAINER_MEM ]] && LIMIT=(systemd-run --user --scope -q -p MemoryMax="$CONTAINER_MEM" -p MemorySwapMax=0)
++BINDS=(-r "$PACK:$PACK"); [[ -n $DRAFT_PACK ]] && BINDS+=(-r "$(readlink -f "$DRAFT_PACK"):$(readlink -f "$DRAFT_PACK")")
++CMD=("${LIMIT[@]}" "$CTR"
++  "${BINDS[@]}" -b "$CACHE_DIR:/root/.cache" -r "$REPO:/opt/recipe"
++  -r "$REPO/patches/vllm/sitecustomize.py:/usr/lib/python3.12/sitecustomize.py"
++  ${XMOE_EXT:+-e XMOE_EXT=$XMOE_EXT}
++  -e TORCH_CUDA_ARCH_LIST=12.0a -e FLASHINFER_CUDA_ARCH_LIST="$FI_ARCH" -e FLASHINFER_DISABLE_VERSION_CHECK=1
++  -e VLLM_ENGINE_READY_TIMEOUT_S=3600 -e NCCL_P2P_DISABLE=${NCCL_P2P_DISABLE:-1}
++  -e PYTORCH_CUDA_ALLOC_CONF="${NO_CUSTOM_AR:+expandable_segments:True,}pinned_max_round_threshold_mb:$PIN_ROUND_MB"
++  -e VLLM_PLUGINS=vllm_exl3 -e DSV41_ENGRAM_DISK=0 -e DSV41_ENGRAM_INT4=1 -e VLLM_MULTI_STREAM_GEMM_TOKEN_THRESHOLD=0
++  -e VLLM_NO_USAGE_STATS=1 -e DO_NOT_TRACK=1 -e CUDA_CACHE_PATH=/root/.cache/nv -e XDG_CONFIG_HOME=/root/.cache/config
++  -e NCCL_CUMEM_ENABLE=0 -e NCCL_DEBUG=WARN
++  -e TILELANG_CACHE_DIR=/root/.cache/tilelang -e TRITON_CACHE_DIR=/root/.cache/triton
++  ${CUDA_VISIBLE_DEVICES:+-e CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES}
++  $PASS_ENV
++  -- vllm serve "$PACK"
++  --tensor-parallel-size 2 --host "$HOST" --port "$PORT" --api-key "$API_KEY"
++  --max-model-len "$MAX_MODEL_LEN" --kv-cache-dtype fp8 --kv-cache-memory "$KV_MEM"
++  --gpu-memory-utilization "$UTIL" --max-num-seqs "$MAX_NUM_SEQS" --max-num-batched-tokens "$MAX_BATCHED"
++  --kernel-config '{"enable_flashinfer_autotune":false,"enable_jit_warmup":false}'
++  --block-size 64 --quantization exl3 $([[ $VISION == 1 ]] || echo --language-model-only)
++  --tokenizer-mode deepseek_v41 --tool-call-parser deepseek_v41 --enable-auto-tool-choice
++  --reasoning-parser deepseek_v41
++  --served-model-name "$SERVED" --trust-remote-code "${extra[@]}" ${EXTRA_ARGS:-})
++if [[ ${DRY_RUN:-0} == 1 ]]; then   # print the exact command (API key masked) and the exported runtime knobs, then exit
++  env | grep -E "^(EXL3_|THOR_|EXL3_DO=|DENSE_HYBRID_M=)" | sort | sed 's/^/export /'
++  printf '%q ' "${CMD[@]}" | sed "s/--api-key [^ ]*/--api-key '***'/"; echo
++  exit 0
++fi
 +cleanup() { [ -n "${WPID:-}" ] && kill $WPID 2>/dev/null; }   # bwrap --die-with-parent ends the server with this script
  trap 'cleanup; exit 130' INT TERM
  if [[ $WARMUP == 1 ]]; then
@@ -78,39 +112,31 @@
 +    req() { curl -s -o /dev/null -H "Authorization: Bearer $API_KEY" -H 'Content-Type: application/json' "http://$WARM_HOST:$PORT/v1/completions" \
        -d "{\"model\":\"$SERVED\",\"prompt\":\"$(python3 -c "print(('warm up the kernels with some text. ' * $1).strip())")\",\"max_tokens\":$2,\"temperature\":0}"; }
      req 400 24; req 1600 24; for i in 1 2 3 4; do req 300 48 & done; wait; req 12 64
-     echo "[warmup] done in $(( $(date +%s)-w0 ))s" ) &
+-    echo "[warmup] done in $(( $(date +%s)-w0 ))s" ) &
++    echo "[warmup] done in $(( $(date +%s)-w0 ))s"
++    echo "[ready] OpenAI-compatible API: http://$WARM_HOST:$PORT/v1  model: $SERVED" ) &
    WPID=$!
  fi
 -docker run --rm --name "$NAME" --gpus all --network host --ipc host --shm-size 32g \
 -  --memory="$CONTAINER_MEM" --memory-swap="$CONTAINER_MEM" --cap-add IPC_LOCK --ulimit memlock=-1:-1 \
 -  -v "$MODELS_DIR":"$MODELS_DIR":ro -v "$CACHE_DIR":/root/.cache -v "$REPO":/opt/recipe:ro \
 -  -v "$REPO/patches/vllm/sitecustomize.py":/usr/lib/python3.12/sitecustomize.py:ro \
-+# torch 2.13's pinned host allocator rounds every pin_memory=True allocation up to a power of two by default; the int4
-+# Engram tables (~22.9 + 2.9 GiB per layer and rank) would take 32 + 4 GiB each, ~41 GiB of extra pinned RAM over the
-+# 4 tables. Allocations above PIN_ROUND_MB are made at their exact size.
-+PIN_ROUND_MB=${PIN_ROUND_MB:-1024}
-+# NCCL_P2P_DISABLE defaults to 1: on our 2x PCIe host (GPU0-GPU1 PHB, no NVLink, IOMMU on) NCCL's P2P transport hangs in
-+# the first all-reduce (nccl_test.py: P2P on never finishes, P2P off completes in ~1 s). Try 0 if nccl_test.py passes.
-+LIMIT=(); [[ -n $CONTAINER_MEM ]] && LIMIT=(systemd-run --user --scope -q -p MemoryMax="$CONTAINER_MEM" -p MemorySwapMax=0)
-+"${LIMIT[@]}" "$CTR" \
-+  -r "$MODELS_DIR:$MODELS_DIR" -b "$CACHE_DIR:/root/.cache" -r "$REPO:/opt/recipe" \
-+  -r "$REPO/patches/vllm/sitecustomize.py:/usr/lib/python3.12/sitecustomize.py" \
-   ${XMOE_EXT:+-e XMOE_EXT=$XMOE_EXT} \
-   -e TORCH_CUDA_ARCH_LIST=12.0a -e FLASHINFER_CUDA_ARCH_LIST="$FI_ARCH" -e FLASHINFER_DISABLE_VERSION_CHECK=1 \
+-  ${XMOE_EXT:+-e XMOE_EXT=$XMOE_EXT} \
+-  -e TORCH_CUDA_ARCH_LIST=12.0a -e FLASHINFER_CUDA_ARCH_LIST="$FI_ARCH" -e FLASHINFER_DISABLE_VERSION_CHECK=1 \
 -  -e VLLM_ENGINE_READY_TIMEOUT_S=3600 -e NCCL_P2P_DISABLE=${NCCL_P2P_DISABLE:-0} \
 -  ${NO_CUSTOM_AR:+-e PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True} \
-+  -e VLLM_ENGINE_READY_TIMEOUT_S=3600 -e NCCL_P2P_DISABLE=${NCCL_P2P_DISABLE:-1} \
-+  -e PYTORCH_CUDA_ALLOC_CONF="${NO_CUSTOM_AR:+expandable_segments:True,}pinned_max_round_threshold_mb:$PIN_ROUND_MB" \
-   -e VLLM_PLUGINS=vllm_exl3 -e DSV41_ENGRAM_DISK=0 -e DSV41_ENGRAM_INT4=1 -e VLLM_MULTI_STREAM_GEMM_TOKEN_THRESHOLD=0 \
-+  -e VLLM_NO_USAGE_STATS=1 -e DO_NOT_TRACK=1 -e CUDA_CACHE_PATH=/root/.cache/nv -e XDG_CONFIG_HOME=/root/.cache/config \
-   -e NCCL_CUMEM_ENABLE=0 -e NCCL_DEBUG=WARN \
-   -e TILELANG_CACHE_DIR=/root/.cache/tilelang -e TRITON_CACHE_DIR=/root/.cache/triton \
-+  ${CUDA_VISIBLE_DEVICES:+-e CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES} \
-   $PASS_ENV \
+-  -e VLLM_PLUGINS=vllm_exl3 -e DSV41_ENGRAM_DISK=0 -e DSV41_ENGRAM_INT4=1 -e VLLM_MULTI_STREAM_GEMM_TOKEN_THRESHOLD=0 \
+-  -e NCCL_CUMEM_ENABLE=0 -e NCCL_DEBUG=WARN \
+-  -e TILELANG_CACHE_DIR=/root/.cache/tilelang -e TRITON_CACHE_DIR=/root/.cache/triton \
+-  $PASS_ENV \
 -  --entrypoint vllm "$IMAGE" serve "$PACK" \
 -  --tensor-parallel-size 2 --host 0.0.0.0 --port "$PORT" --api-key "$API_KEY" \
-+  -- vllm serve "$PACK" \
-+  --tensor-parallel-size 2 --host "${HOST:-127.0.0.1}" --port "$PORT" --api-key "$API_KEY" \
-   --max-model-len "$MAX_MODEL_LEN" --kv-cache-dtype fp8 --kv-cache-memory "$KV_MEM" \
-   --gpu-memory-utilization "$UTIL" --max-num-seqs "$MAX_NUM_SEQS" --max-num-batched-tokens "$MAX_BATCHED" \
-   --kernel-config '{"enable_flashinfer_autotune":false,"enable_jit_warmup":false}' \
+-  --max-model-len "$MAX_MODEL_LEN" --kv-cache-dtype fp8 --kv-cache-memory "$KV_MEM" \
+-  --gpu-memory-utilization "$UTIL" --max-num-seqs "$MAX_NUM_SEQS" --max-num-batched-tokens "$MAX_BATCHED" \
+-  --kernel-config '{"enable_flashinfer_autotune":false,"enable_jit_warmup":false}' \
+-  --block-size 64 --quantization exl3 $([[ $VISION == 1 ]] || echo --language-model-only) \
+-  --tokenizer-mode deepseek_v41 --tool-call-parser deepseek_v41 --enable-auto-tool-choice \
+-  --reasoning-parser deepseek_v41 \
+-  --served-model-name "$SERVED" --trust-remote-code "${extra[@]}" ${EXTRA_ARGS:-}
++"${CMD[@]}"
+ rc=$?; cleanup; exit $rc

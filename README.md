@@ -14,6 +14,18 @@ needs no Docker and no root.
 
 Full numbers: [results/](results/README.md).
 
+## Quickstart: ready-to-run on Hugging Face
+
+The finished pack and a prebuilt runtime (rootfs with everything compiled) are on Hugging Face as
+**[cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000](https://huggingface.co/cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000)**:
+
+```bash
+hf download cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000 --local-dir dsv41-1017
+bash dsv41-1017/run.sh        # checks the host, unpacks the runtime once, serves http://127.0.0.1:8000/v1
+```
+
+This repository is for rebuilding all of that from the upstream sources, and for the benchmarks.
+
 This repository contains no new model weights and no new serving engine. It combines existing work:
 
 - **[diffbot/DeepSeek-V4.1-Flash-EXL3-3bpw-2x-RTX-PRO-6000](https://huggingface.co/diffbot/DeepSeek-V4.1-Flash-EXL3-3bpw-2x-RTX-PRO-6000)**:
@@ -92,17 +104,6 @@ The official Engram shards are verified with these checksums:
 9dc51433e195bc78b5ad846b68643cc0351d3b174e5e4309222d3b7402c83afd  model-00048-of-00048.safetensors
 ```
 
-**Shortcut, skipping the 203 GB official download and the CPU conversion:** the converted int4 Engram shards are
-published as a delta pack, [cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000-delta](https://huggingface.co/cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000-delta)
-(111 GB). Download only PixelML's repo plus the delta:
-
-```bash
-source scripts/env.sh
-hf_cli download "$PIXELML_REPO" --revision "$PIXELML_REV" --local-dir "$PIXELML_DIR"
-hf_cli download cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000-delta --local-dir "$ENGRAM_DIR"
-scripts/prepare_pack.sh     # verifies sha256sums.txt and assembles the pack; no conversion
-```
-
 ### 4. Pack: `scripts/prepare_pack.sh` (~50 min, CPU only, peak RSS ~121 GiB)
 
 1. Checks the sha256 above.
@@ -139,6 +140,7 @@ Settings beyond diffbot's defaults (all overridable):
 | `PLAN` | `plan-blend30-dh.json` | Which 30% of the experts live in host RAM. These plans were chosen from **legacy** routing statistics: `agent30` suits long agentic sessions, `gen30` short synthetic prompts, `blend30` is in between. All results here used blend30. A 1017-specific plan (`EXL3_EXPERT_STATS` + the recipe's `plans/make_plan.py`) should do better. |
 | `DRAFT_PACK` | empty | **Untested.** Points the DSpark draft model at `…-thor-drafter`. vLLM loads the draft model by reading its whole checkpoint directory, so with the full pack it re-reads all 311 GB, ~23 of the ~85 cold-start minutes on HDD. |
 | `HOST`, `PORT`, `SERVED`, `CACHE_DIR` | `127.0.0.1`, `8000`, `deepseek-v4.1-flash-1017`, `$WORK/cache` | |
+| `DRY_RUN` | `0` | `1` prints the exact server command (API key masked) and exits. |
 
 Everything else (`MAX_MODEL_LEN`, `KV_MEM`, `SPEC_K`, `VISION`, `THINKING`, `THOR_*`, `EXL3_*`, …) behaves as in the
 recipe's `serve/serve.sh`. The recipe's `README.md` explains each setting.
@@ -225,4 +227,5 @@ See [NOTICE.md](NOTICE.md) for licenses.
 - 从 HDD 冷启动约 85 分钟；
 - 思考模式偶尔推理过长被截断。
 
-步骤见上文 “Step by step”，评测结果见 [results/REPORT.zh.md](results/REPORT.zh.md)。
+直接可用的权重和预编译运行环境在 Hugging Face：[cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000](https://huggingface.co/cliecy/DeepSeek-V4.1-Flash-1017-EXL3-3bpw-2xRTXPRO6000)，下载后执行 `bash run.sh` 即可。
+从源码重建的步骤见上文 “Step by step”，评测结果见 [results/REPORT.zh.md](results/REPORT.zh.md)。
