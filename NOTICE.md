@@ -12,6 +12,7 @@ not redistributed here.
 | `scripts/build-bwrap.sh` | `recipe/docker/build.sh` and `recipe/kernels/build.sh` of the same repository | MIT, Copyright (c) 2026 Diffbot |
 | `scripts/assemble_pack_1017.py` | `recipe/quantize/assemble_pack.py` of the same repository | MIT, Copyright (c) 2026 Diffbot |
 | `patches/*.diff` | diffs between the files above and their diffbot originals | MIT, Copyright (c) 2026 Diffbot (original lines) |
+| `patches/llama.cpp/*.patch` | patches against [llama.cpp](https://github.com/ggml-org/llama.cpp) PR #28696 @ `2076412`; `0006` is by midagedev (vcruz305/llama.cpp#2) | MIT, Copyright (c) The ggml authors (context lines) |
 
 The diffbot recipe's MIT license:
 

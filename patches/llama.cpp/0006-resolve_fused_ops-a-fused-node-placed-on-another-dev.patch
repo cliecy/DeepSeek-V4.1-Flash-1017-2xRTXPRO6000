@@ -1,0 +1,42 @@
+From 63c515ca4ee7ddb50dc544a748da09c9206271b9 Mon Sep 17 00:00:00 2001
+From: midagedev <midagedev@gmail.com>
+Date: Sun, 18 Oct 2026 13:09:39 +0900
+Subject: [PATCH 6/7] resolve_fused_ops: a fused node placed on another device
+ at a layer boundary is not missing support
+
+On a two-GPU layer split the probe for the fused DeepSeek-V4 hyper-connection
+pre op saw the fused node of the first layer on the second device placed on
+the first device (its inputs come from the previous layer), read that as
+missing support, and disabled the op on every layer. Ask the layer's device
+whether it supports the op before treating a placement mismatch as missing
+support.
+
+Cherry-picked from vcruz305/llama.cpp#2.
+---
+ src/llama-context.cpp | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+index 5186d306d..bd093dc1a 100644
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -532,6 +532,16 @@ void llama_context::resolve_fused_ops(const llama_memory_context_i * mctx, uint3
+             // but is still wrong for cases like --no-kv-offload.
+             ggml_backend_dev_t device_layer = model.dev_layer(node.il);
+ 
++            if (device_fused != device_layer && device_layer && ggml_backend_dev_supports_op(device_layer, node.tensor)) {
++                // a weightless fused node at a device boundary follows the producer of its inputs to the
++                // previous device (the unfused ops land there too); the layer device supports the op, so
++                // this is placement, not missing support
++                LLAMA_LOG_INFO("%s: layer %d: %s placed on %s by the scheduler, %s supports it, keeping it enabled\n",
++                        func, node.il, probe.name, device_fused ? ggml_backend_dev_name(device_fused) : "none",
++                        ggml_backend_dev_name(device_layer));
++                continue;
++            }
++
+             if (device_fused != device_layer) {
+                 LLAMA_LOG_WARN("%s: layer %d is assigned to device %s but %s "
+                         "is assigned to device %s (usually due to missing support)\n",
+-- 
+2.53.0
+

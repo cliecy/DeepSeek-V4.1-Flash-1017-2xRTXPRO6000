@@ -1,0 +1,100 @@
+From 398ec2099a7743a5ff47ab82ae69b25ba23e755c Mon Sep 17 00:00:00 2001
+From: cliecy <cliecy@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 13:09:39 +0900
+Subject: [PATCH 4/7] deepseek41 : use the fused lightning indexer, bound the
+ unfused fallback
+
+The V4.1 indexer scored with a batched mat-vec over [n_idx_head, n_tokens,
+n_comp] followed by relu/mul/sum_rows. At decode this reads the index keys
+once per head (32x); at 60K context it was ~9 ms per token on one GPU and
+the main reason generation slowed down with context. At prefill it
+materializes the F32 product twice, 64 GB per index layer at 1M positions
+with a 512-token ubatch.
+
+Use ggml_lightning_indexer when cparams.fused_lid is set, as deepseek4 does.
+When it is not, accumulate the unfused score head by head once the one-shot
+buffer would exceed 256 MiB, which peaks at a few [n_comp, n_tokens]
+buffers instead.
+---
+ src/models/deepseek41.cpp | 61 +++++++++++++++++++++++++++++----------
+ 1 file changed, 45 insertions(+), 16 deletions(-)
+
+diff --git a/src/models/deepseek41.cpp b/src/models/deepseek41.cpp
+index d94010d63..d3b812642 100644
+--- a/src/models/deepseek41.cpp
++++ b/src/models/deepseek41.cpp
+@@ -576,26 +576,55 @@ ggml_tensor * llama_model_deepseek41::graph::build_indexer_top_k(
+             idx_w->ne[0], idx_w->ne[1]/n_stream, idx_w->ne[2], n_stream,
+             idx_w->nb[1], idx_w->nb[2]/n_stream, idx_w->nb[3]/n_stream, 0);
+ 
+-    idx_q = ggml_permute(ctx0, idx_q, 0, 2, 1, 3);
+-    idx_k = ggml_permute(ctx0, idx_k, 0, 2, 1, 3);
+-
+-    ggml_tensor * score = ggml_mul_mat(ctx0, idx_k, idx_q);
+-    score = ggml_cont(ctx0, ggml_permute(ctx0, score, 2, 1, 0, 3));
+-
+-    score = ggml_relu(ctx0, score);
+-    score = ggml_mul(ctx0, score, idx_w);
+-    score = ggml_sum_rows(ctx0, score);
+-    score = ggml_cont(ctx0, ggml_permute(ctx0, score, 2, 1, 0, 3));
+-
+-    // the attention mask is F16 when flash attention is on, and this score is F32. the mask only
++    // the attention mask is F16 when flash attention is on, and the scores are F32. the mask only
+     // ever holds 0 or -inf, so widening it is exact.
+     ggml_tensor * mask = inp_comp.kq_mask;
+-    if (mask->type != score->type) {
+-        mask = ggml_cast(ctx0, mask, score->type);
++    if (mask->type != GGML_TYPE_F32) {
++        mask = ggml_cast(ctx0, mask, GGML_TYPE_F32);
+     }
+ 
+-    score = ggml_add(ctx0, score, mask);
+-    cb(score, "idx_score", il);
++    ggml_tensor * score = nullptr;
++    if (cparams.fused_lid) {
++        // One kernel scores all heads against each key once and applies the mask. The unfused
++        // product below reads the keys once per head (32x at decode, the main per-token cost
++        // that grew with the context) and materializes [n_idx_head, n_tokens, n_comp] F32.
++        ggml_tensor * mask16 = inp_comp.kq_mask->type == GGML_TYPE_F16
++            ? inp_comp.kq_mask
++            : ggml_cast(ctx0, inp_comp.kq_mask, GGML_TYPE_F16);
++        score = ggml_lightning_indexer(ctx0, idx_q, idx_k, idx_w, mask16);
++        cb(score, "idx_score", il);
++        res->add_fused_node({LLM_FUSED_OP_LIGHTNING_INDEXER, score, il});
++    } else {
++        idx_q = ggml_permute(ctx0, idx_q, 0, 2, 1, 3);
++        idx_k = ggml_permute(ctx0, idx_k, 0, 2, 1, 3);
++
++        // The one-shot form materializes [n_idx_head, n_tokens, n_comp] F32 twice (the product and
++        // its permuted copy): 64 GB per index layer at 1M positions and a 512-token ubatch. Past a
++        // threshold, accumulate head by head instead, which peaks at a few [n_comp, n_tokens] buffers.
++        const bool per_head = n_stream == 1 &&
++            (double) n_comp * (double) nt * (double) n_idx_head * sizeof(float) > 256.0 * 1024 * 1024;
++        if (per_head) {
++            ggml_tensor * k2 = ggml_view_2d(ctx0, idx_k, idx_k->ne[0], n_comp, idx_k->nb[1], 0);
++            for (int64_t h = 0; h < n_idx_head; ++h) {
++                ggml_tensor * q_h = ggml_view_2d(ctx0, idx_q, idx_q->ne[0], nt, idx_q->nb[1], h*idx_q->nb[2]);
++                ggml_tensor * w_h = ggml_view_2d(ctx0, idx_w, 1, nt, idx_w->nb[1], h*idx_w->nb[0]);
++                ggml_tensor * s_h = ggml_mul_mat(ctx0, k2, q_h);          // [n_comp, nt]
++                s_h = ggml_mul(ctx0, ggml_relu(ctx0, s_h), w_h);
++                score = score ? ggml_add(ctx0, score, s_h) : s_h;
++            }
++        } else {
++            score = ggml_mul_mat(ctx0, idx_k, idx_q);
++            score = ggml_cont(ctx0, ggml_permute(ctx0, score, 2, 1, 0, 3));
++
++            score = ggml_relu(ctx0, score);
++            score = ggml_mul(ctx0, score, idx_w);
++            score = ggml_sum_rows(ctx0, score);
++            score = ggml_cont(ctx0, ggml_permute(ctx0, score, 2, 1, 0, 3));
++        }
++
++        score = ggml_add(ctx0, score, mask);
++        cb(score, "idx_score", il);
++    }
+ 
+     // Two-level selection (reference select_candidate_blocks): the candidate source keeps the
+     // cand_topk_blocks best blocks of cand_block_size positions for each query, and the index
+-- 
+2.53.0
+

@@ -168,6 +168,15 @@ Optional:
 
 Details, memory tables and tuning knobs: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## llama.cpp / GGUF route
+
+We also ran the model as a GGUF with llama.cpp on the same two GPUs, on top of the unmerged DeepSeek V4.1 PR
+[ggml-org/llama.cpp#28696](https://github.com/ggml-org/llama.cpp/pull/28696). That needed 7 patches (long-context
+candidate selection, faster indexer and decode, multi-GPU and `llama-imatrix` fixes) plus `-ts 48,52` on 2 GPUs. With
+them, single-stream decode of a Q2_K GGUF at 16K context went from 23 to 45 tok/s. The patches are in
+[`patches/llama.cpp/`](patches/llama.cpp/); what each one does, how to build, and the numbers:
+[docs/LLAMACPP-FIXES.md](docs/LLAMACPP-FIXES.md).
+
 ## Benchmarks
 
 `results/eval/run_all.sh` runs the speed, needle and quality suites against a running server (see
@@ -208,8 +217,9 @@ datasets; the datasets are not redistributed here.
 |---|---|
 | `scripts/` | `env.sh` (settings), `fetch.sh`, `build-bwrap.sh`, `download.sh`, `prepare_pack.sh` + `assemble_pack_1017.py`, `serve-bwrap.sh`, `ctr.sh` (bubblewrap runner), `share-acl.sh`, `nccl_test.py`, `monitor.sh` |
 | `patches/` | How our derived scripts differ from the diffbot recipe files they started from (`serve.sh`, `docker/build.sh`, `quantize/assemble_pack.py`). For reference only; the scripts in `scripts/` are complete. |
+| `patches/llama.cpp/` | 7 patches for the GGUF route, to apply on top of llama.cpp PR #28696 (see [docs/LLAMACPP-FIXES.md](docs/LLAMACPP-FIXES.md)) |
 | `results/` | Benchmark report ([English](results/README.md), [Chinese](results/REPORT.zh.md)), `summary.json`, per-run and per-item data, eval harness |
-| `docs/` | Architecture notes and diagram ([English](docs/ARCHITECTURE.md), [Chinese](docs/ARCHITECTURE.zh-CN.md)) |
+| `docs/` | Architecture notes and diagram ([English](docs/ARCHITECTURE.md), [Chinese](docs/ARCHITECTURE.zh-CN.md)); llama.cpp fixes ([English](docs/LLAMACPP-FIXES.md), [Chinese](docs/LLAMACPP-FIXES.zh-CN.md)) |
 
 ## Credits
 

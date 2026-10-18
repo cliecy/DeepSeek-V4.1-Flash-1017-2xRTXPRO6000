@@ -1,0 +1,45 @@
+From 1f91bd60a355fe160510d08303b0b023983f4587 Mon Sep 17 00:00:00 2001
+From: cliecy <cliecy@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 13:09:39 +0900
+Subject: [PATCH 7/7] imatrix : skip nodes without a weight operand
+
+collect_imatrix dereferenced src0->name before checking the op. The
+DeepSeek-V4.1 graph has nodes with a NULL src[0] that reach the callback,
+so llama-imatrix segfaulted on the first chunk. Return early for anything
+that is not MUL_MAT / MUL_MAT_ID or lacks src0/src1, and skip operands
+that have no storage of their own (fused sections).
+---
+ tools/imatrix/imatrix.cpp | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/tools/imatrix/imatrix.cpp b/tools/imatrix/imatrix.cpp
+index f5fee6218..d4b665907 100644
+--- a/tools/imatrix/imatrix.cpp
++++ b/tools/imatrix/imatrix.cpp
+@@ -236,6 +236,10 @@ bool IMatrixCollector::collect_imatrix(struct ggml_tensor * t, bool ask, void *
+ 
+     const struct ggml_tensor * src0 = t->src[0];
+     const struct ggml_tensor * src1 = t->src[1];
++    // the scheduler asks about every node; only matrix products carry a weight in src0
++    if ((t->op != GGML_OP_MUL_MAT && t->op != GGML_OP_MUL_MAT_ID) || src0 == nullptr || src1 == nullptr) {
++        return false;
++    }
+     std::string wname = filter_tensor_name(src0->name);
+ 
+     const int32_t chunk_size = m_params.n_ctx / m_params.n_parallel;
+@@ -253,6 +257,12 @@ bool IMatrixCollector::collect_imatrix(struct ggml_tensor * t, bool ask, void *
+ 
+     std::lock_guard<std::mutex> lock(m_mutex);
+ 
++    // fused graph sections (e.g. DeepSeek-V4 hyper-connection ops) can leave an operand without
++    // storage of its own; there is nothing to read then
++    if (src1->buffer == nullptr || src1->data == nullptr || src0->buffer == nullptr) {
++        return true;
++    }
++
+     // copy the data from the GPU memory if needed
+     const bool is_host = ggml_backend_buffer_is_host(src1->buffer);
+ 
+-- 
+2.53.0
+

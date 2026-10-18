@@ -169,6 +169,14 @@ curl -s localhost:8000/v1/chat/completions -H "Authorization: Bearer change-me" 
 
 细节、内存表格和可调参数：[docs/ARCHITECTURE.zh-CN.md](docs/ARCHITECTURE.zh-CN.md)。
 
+## llama.cpp / GGUF 路线
+
+我们也在同样的两张 GPU 上用 llama.cpp 跑了这个模型的 GGUF，基于尚未合并的 DeepSeek V4.1 PR
+[ggml-org/llama.cpp#28696](https://github.com/ggml-org/llama.cpp/pull/28696)。为此需要 7 个补丁（长上下文的候选块选择、
+更快的 indexer 和 decode、多卡和 `llama-imatrix` 的修复），两卡时还要加 `-ts 48,52`。用上这些后，Q2_K GGUF 在 16K 上下文的
+单路 decode 从 23 tok/s 提高到 45 tok/s。补丁在 [`patches/llama.cpp/`](patches/llama.cpp/)；每个补丁的作用、编译方法和测试数字见
+[docs/LLAMACPP-FIXES.zh-CN.md](docs/LLAMACPP-FIXES.zh-CN.md)。
+
 ## 评测
 
 `results/eval/run_all.sh` 对运行中的服务执行速度、大海捞针和质量三组评测（见 [results/REPORT.zh.md](results/REPORT.zh.md)，
@@ -208,8 +216,9 @@ curl -s localhost:8000/v1/chat/completions -H "Authorization: Bearer change-me" 
 |---|---|
 | `scripts/` | `env.sh`（设置）、`fetch.sh`、`build-bwrap.sh`、`download.sh`、`prepare_pack.sh` + `assemble_pack_1017.py`、`serve-bwrap.sh`、`ctr.sh`（bubblewrap 运行器）、`share-acl.sh`、`nccl_test.py`、`monitor.sh` |
 | `patches/` | 我们的脚本和它们所基于的 diffbot recipe 文件（`serve.sh`、`docker/build.sh`、`quantize/assemble_pack.py`）之间的差异。仅供参考，`scripts/` 里的脚本是完整的。 |
+| `patches/llama.cpp/` | GGUF 路线用的 7 个补丁，打在 llama.cpp PR #28696 之上（见 [docs/LLAMACPP-FIXES.zh-CN.md](docs/LLAMACPP-FIXES.zh-CN.md)） |
 | `results/` | 评测报告（[中文](results/REPORT.zh.md)、[英文](results/README.md)）、`summary.json`、每次运行和每道题的数据、评测脚本 |
-| `docs/` | 部署结构说明和图（[中文](docs/ARCHITECTURE.zh-CN.md)、[英文](docs/ARCHITECTURE.md)） |
+| `docs/` | 部署结构说明和图（[中文](docs/ARCHITECTURE.zh-CN.md)、[英文](docs/ARCHITECTURE.md)）；llama.cpp 修复说明（[中文](docs/LLAMACPP-FIXES.zh-CN.md)、[英文](docs/LLAMACPP-FIXES.md)） |
 
 ## 致谢
 
